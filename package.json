@@ -1,0 +1,9 @@
+{
+  "name": "poliglot-ui",
+  "main": "application.html",
+  "window": {
+    "toolbar": true,
+    "width": 1280,
+    "height": 800
+  }
+}
