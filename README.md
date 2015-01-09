@@ -1,6 +1,8 @@
 # Parallel corpus editor
 poliglot-ui is an editor for structuring and annotating a parallel sentence corpus.
 
+![](docs/screenshot.png)
+
 ## Installation
 **Dependencies:** node-webkit, Node.js, Scala and sbt.
 
