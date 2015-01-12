@@ -218,8 +218,7 @@ case class Corpus() extends CustomPage {
           .css("token-separator")
           .show(ctrlPressed.map(_ && entity.get.tokens.get._1 != token))
           .cursor(HTML.Cursor.Pointer)
-          .bindMouse(Event.Mouse.Click,
-            (_: MouseEvent) => splitEntity(tks.entities, entity, token))
+          .onClick(_ => splitEntity(tks.entities, entity, token))
 
         , HTML.Container.Inline(tks.tokens(token).orth)
           .attribute("data-hint", {
@@ -239,13 +238,11 @@ case class Corpus() extends CustomPage {
 
           , HTML.Container.Inline()
             .show(children.isLast(entityRef).map(!_))
-            .bindMouse(Event.Mouse.Click,
-              (ev: MouseEvent) => mergeEntity(tks.entities, entityRef, ev))
+            .onClick(ev => mergeEntity(tks.entities, entityRef, ev))
             .css("entity-merge")
             .css("entity-separator")
         ).css("disable-selection")
-         .bindMouse(Event.Mouse.DoubleClick,
-            (ev: MouseEvent) => expandEntity(tks.entities, children, entity))
+         .onDoubleClick(ev => expandEntity(tks.entities, children, entity))
       }
     )
   }
@@ -322,19 +319,19 @@ case class Corpus() extends CustomPage {
     }
 
     , Button(Glyphicon.Ok)("Diagnostics")
-      .bind { (_: Unit) => loadDiagnostics() }
+      .onClick(_ => loadDiagnostics())
       .show(translation.nonEmpty)
 
-    , Button(Glyphicon.Ok)("Mark as (un)done").bind { (_: Unit) =>
+    , Button(Glyphicon.Ok)("Mark as (un)done").onClick { _ =>
       translation.get.get.done := !translation.get.get.done.get
       saveCorpus()
     }.show(translation.nonEmpty)
 
-    , Button(Glyphicon.ArrowLeft)("Previous").bind((_: Unit) => prev())
+    , Button(Glyphicon.ArrowLeft)("Previous").onClick(_ => prev())
       .show(translation.flatMap(tr => translations.flatMap(_.translations.isHead(tr))).map(!_)) // TODO shorter
       .show(translation.nonEmpty)
 
-    , Button(Glyphicon.ArrowRight)("Next").bind((_: Unit) => next())
+    , Button(Glyphicon.ArrowRight)("Next").onClick(_ => next())
       .show(translation.flatMap(tr => translations.flatMap(_.translations.isLast(tr))).map(!_)) // TODO shorter
       .show(translation.nonEmpty)
 
@@ -348,7 +345,7 @@ case class Corpus() extends CustomPage {
           else HTML.Text((idx + 1).toString))
       ).cssCh(tr.get.done.map(if (_) "btn-success" else "btn-danger"))
        .cssCh(translation.equal(tr), "active")
-       .bind((_: Unit) => translation := tr)
+       .onClick(_ => translation := tr)
     }
 
     , HTML.LineBreak()
@@ -358,8 +355,8 @@ case class Corpus() extends CustomPage {
         HTML.Text.Bold(
           (translations.get.translations.indexOf(tr) + 1).toString + ": ")
         , Diagnostics.description(id)
-        , Button(Glyphicon.Book)("Load").bind((_: Unit) => translation := tr)
-        , Button(Glyphicon.Book)("Ignore").bind { (_: Unit) =>
+        , Button(Glyphicon.Book)("Load").onClick(_ => translation := tr)
+        , Button(Glyphicon.Book)("Ignore").onClick { _ =>
           tr.get.disabledDiagnostics += id
           diagnostics.remove(ref)
           saveCorpus()
