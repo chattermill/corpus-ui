@@ -4,24 +4,27 @@ import org.widok.{Buffer, Opt, Var}
 
 import scala.collection.mutable
 
-case class Token(orth: String, lemma: String, tag: String)
+class Token(val orth: String,
+            val lemma: String,
+            val tag: String)
 
-case class Entity(id: Int,
-                  parent: Int,
-                  tokens: Var[(Int, Int)],
-                  dependency: Opt[Int] = Opt(), // ID this entity semantically depends on
-                  alignment: Opt[Int] = Opt(), // ID of target entity
-                  `class`: Opt[String] = Opt())
+class Entity(val id: Int,
+             val parent: Int,
+             val tokens: Var[(Int, Int)],
+             val dependency: Opt[Int] = Opt(), // ID this entity semantically depends on
+             val alignment: Opt[Int] = Opt(), // ID of target entity
+             val `class`: Opt[String] = Opt())
 {
   def size: Int =
     tokens.get match { case (l, u) => u - l }
 }
 
-case class Tokens(tokens: Seq[Token], entities: Buffer[Entity])
+class Tokens(val tokens: Seq[Token],
+             val entities: Buffer[Entity])
 
-case class Translation(source: Tokens,
-                       target: Tokens,
-                       done: Var[Boolean],
-                       disabledDiagnostics: mutable.ArrayBuffer[String])
+class Translation(val source: Tokens,
+                  val target: Tokens,
+                  val done: Var[Boolean],
+                  val disabledDiagnostics: mutable.ArrayBuffer[String])
 
-case class Translations(translations: Buffer[Translation])
+class Translations(val translations: Buffer[Translation])

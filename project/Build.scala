@@ -7,7 +7,7 @@ object Build extends sbt.Build {
   val projectName = "poliglot-ui"
   val buildOrganisation = "poliglot"
   val buildVersion = "0.1-SNAPSHOT"
-  val buildScalaVersion = "2.11.4"
+  val buildScalaVersion = "2.11.5"
   val buildScalaOptions = Seq(
     "-unchecked", "-deprecation",
     "-encoding", "utf8",
@@ -17,7 +17,7 @@ object Build extends sbt.Build {
     .enablePlugins(ScalaJSPlugin)
     .settings(
       libraryDependencies ++= Seq(
-        "io.github.widok" %%% "widok" % "0.1.4-SNAPSHOT"
+        "io.github.widok" %%% "widok" % "0.2.0-SNAPSHOT"
       ),
       organization := buildOrganisation,
       version := buildVersion,

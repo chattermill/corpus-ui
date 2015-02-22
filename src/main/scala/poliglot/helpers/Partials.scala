@@ -4,7 +4,7 @@ import org.widok._
 import org.widok.bindings.Bootstrap._
 
 trait Navigation {
-  def header() = NavigationBar()(
+  def header() = NavigationBar(
     Container(
       NavigationBar.Header(
         NavigationBar.Toggle(),

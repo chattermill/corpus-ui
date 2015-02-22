@@ -33,7 +33,7 @@ object Database {
   def parseToken(tree: js.Object, id: Int): Token = {
     val token = tree.asInstanceOf[js.Dynamic]
 
-    Token(
+    new Token(
       token.findtext("./orth").asInstanceOf[String],
       token.findtext("./lemma").asInstanceOf[String],
       token.findtext("./tag").asInstanceOf[String]
@@ -50,7 +50,7 @@ object Database {
   def parseEntity(tree: js.Object): Entity = {
     val entity = tree.asInstanceOf[js.Dynamic]
 
-    Entity(
+    new Entity(
       id = entity.findtext("./id").asInstanceOf[String].toInt,
       parent = entity.findtext("./parent").asInstanceOf[String].toInt,
       tokens = Var(
@@ -86,7 +86,7 @@ object Database {
   def parseTokens(tree: js.Object): Tokens = {
     val tokens = tree.asInstanceOf[js.Dynamic]
 
-    Tokens(
+    new Tokens(
       tokens = tokens.findall("./tokens/*").asInstanceOf[js.Array[js.Object]].toList.zipWithIndex.map((parseToken _).tupled),
       entities = Buffer(tokens.findall("./entities/*").asInstanceOf[js.Array[js.Object]].toArray.map(parseEntity): _*)
     )
@@ -98,7 +98,7 @@ object Database {
   def parseTranslation(tree: js.Object): Translation = {
     val translation = tree.asInstanceOf[js.Dynamic]
 
-    Translation(
+    new Translation(
       source = parseTokens(translation.find("./source").asInstanceOf[js.Object]),
       target = parseTokens(translation.find("./target").asInstanceOf[js.Object]),
       done = Var(UndefOr.any2undefOrA(translation.findtext("./done")).exists(_.asInstanceOf[String] == "true")),
@@ -110,7 +110,7 @@ object Database {
     NodeJS.readFile(path).map { xml =>
       val tree = et.parse(xml)
 
-      Translations(
+      new Translations(
         translations = Buffer(tree.findall("translation").asInstanceOf[js.Array[js.Object]].toArray.map(parseTranslation): _*)
       )
     }
@@ -119,7 +119,7 @@ object Database {
   def encodeTokens(tks: Tokens, node: js.Dynamic) {
     val tokens = et.SubElement(node, "tokens"); tks.tokens.foreach(cur => encodeToken(tokens, cur))
     val entities = et.SubElement(node, "entities"); tks.entities.foreach { ent =>
-      if (!tks.entities.get.exists(_.get.parent == ent.id)) {
+      if (!tks.entities.get.exists(_.parent == ent.id)) {
         /* Reset alignment and dependency if entity has no children. */
         ent.alignment.clear()
         ent.dependency.clear()

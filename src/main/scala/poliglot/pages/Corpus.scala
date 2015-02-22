@@ -1,13 +1,13 @@
 package poliglot.pages
 
 import org.scalajs.dom
-import org.scalajs.dom.{KeyboardEvent, MouseEvent}
+import org.scalajs.dom.MouseEvent
 
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.runNow
 
 import org.widok._
-import org.widok.bindings.Bootstrap.{Glyphicon, Button}
-import org.widok.bindings.{Bootstrap, HTML}
+import org.widok.bindings.HTML
+import org.widok.bindings.Bootstrap._
 
 import poliglot.models
 import poliglot.helpers.{NodeJS, CustomPage}
@@ -15,8 +15,7 @@ import poliglot.models.{Diagnostics, Database}
 
 case class Corpus() extends CustomPage {
   val ctrlPressed = Var(false)
-  dom.document.onkeyup = (e: KeyboardEvent) => ctrlPressed := e.ctrlKey
-  dom.document.onkeydown = (e: KeyboardEvent) => ctrlPressed := e.ctrlKey
+  ctrlPressed << Document.keyDown.merge(Document.keyUp).map(_.ctrlKey)
 
   val diagnostics = Buffer[Diagnostics.Result]()
 
@@ -34,9 +33,9 @@ case class Corpus() extends CustomPage {
 
     tr.onSuccess { case res =>
       var added = 0
-      res.translations.get.foreach { case Ref(trans) =>
+      res.translations.get.foreach { trans =>
         if (!translations.get.translations.get
-          .exists(_.get.source.tokens == trans.source.tokens))
+          .exists(_.source.tokens == trans.source.tokens))
         {
           translations.get.translations += trans
           added += 1
@@ -48,7 +47,7 @@ case class Corpus() extends CustomPage {
   }
 
   val translations = Opt[models.Translations]()
-  val translation = Opt[Ref[models.Translation]]()
+  val translation = Opt[models.Translation]()
 
   def alert(str: String) {
     ctrlPressed := false /* CTRL does not get released otherwise. */
@@ -71,26 +70,24 @@ case class Corpus() extends CustomPage {
 
   def loadDiagnostics() {
     val errors = Diagnostics.accumulate(translations.get)
-
-    diagnostics.clear()
-    diagnostics ++= Buffer(errors: _*)
+    diagnostics.set(errors)
   }
 
   def removeUnreachable(ents: Buffer[models.Entity]) {
     def leadsToRoot(ent: models.Entity): Boolean = {
       if (ent.parent == -1) true
       else {
-        val parent = ents.get.find(_.get.id == ent.parent)
+        val parent = ents.get.find(_.id == ent.parent)
         if (parent.isEmpty) false
-        else leadsToRoot(parent.get.get)
+        else leadsToRoot(parent.get)
       }
     }
 
     val queue = Buffer[models.Entity]()
-    ents.get.foreach { case entRef @ Ref(ent) =>
+    ents.get.foreach { ent =>
       if (!leadsToRoot(ent)) {
-        println("found unreachable: " + ent)
-        queue.append(entRef)
+        println(s"Found unreachable: $ent")
+        queue.append(ent)
       }
     }
 
@@ -101,8 +98,8 @@ case class Corpus() extends CustomPage {
 
   def saveCorpus() {
     translations.get.translations.get.foreach { tr =>
-      removeUnreachable(tr.get.source.entities)
-      removeUnreachable(tr.get.target.entities)
+      removeUnreachable(tr.source.entities)
+      removeUnreachable(tr.target.entities)
     }
 
     val tr = Database.saveTranslations(dbPath.get, translations.get)
@@ -118,22 +115,22 @@ case class Corpus() extends CustomPage {
   }
 
   def splitEntity(ents: Buffer[models.Entity],
-                   entity: Ref[models.Entity],
+                   entity: models.Entity,
                    token: Int)
   {
-    if (ents.get.find(_.get.parent == entity.get.id).nonEmpty) {
+    if (ents.exists$(_.parent == entity.id)) {
       alert("The left entity has children. Delete these first.")
       return
     }
 
-    val (parentFrom, parentTo) = entity.get.tokens.get
+    val (parentFrom, parentTo) = entity.tokens.get
 
-    entity.get.tokens := (parentFrom, token)
+    entity.tokens := (parentFrom, token)
 
     ents.insertAfter(entity,
-      models.Entity(
+      new models.Entity(
         id = nextId(ents),
-        parent = entity.get.parent,
+        parent = entity.parent,
         tokens = Var((token, parentTo))
       )
     )
@@ -142,31 +139,31 @@ case class Corpus() extends CustomPage {
   }
 
   def mergeEntity(ents: Buffer[models.Entity],
-                  entity: Ref[models.Entity],
+                  entity: models.Entity,
                   ev: MouseEvent)
   {
-    if (ents.get.find(_.get.parent == entity.get.id).nonEmpty) {
+    if (ents.exists$(_.parent == entity.id)) {
       alert("The left entity has children. Delete these first.")
       return
     }
 
-    ents.afterOption(entity).foreach { case afterRef @ Ref(after) =>
-      if (ents.get.find(_.get.parent == after.id).nonEmpty) {
+    ents.afterOption$(entity).foreach { after =>
+      if (ents.exists$(_.parent == after.id)) {
         alert("The right entity has children. Delete these first.")
         return
       }
 
-      entity.get.tokens := (entity.get.tokens.get._1, after.tokens.get._2)
-      ents.remove(afterRef)
+      entity.tokens := (entity.tokens.get._1, after.tokens.get._2)
+      ents.remove(after)
     }
 
     saveCorpus()
   }
 
-  def removeRecursively(ents: Buffer[models.Entity], refs: Seq[Ref[models.Entity]]) {
+  def removeRecursively(ents: Buffer[models.Entity], refs: Seq[models.Entity]) {
     val queue = Buffer[models.Entity]()
     refs.foreach { ref =>
-      removeRecursively(ents, ents.get.filter(_.get.parent == ref.get.id))
+      removeRecursively(ents, ents.filter$(_.parent == ref.id).get)
       queue.append(ref)
     }
     queue.get.foreach(ents.remove)
@@ -181,12 +178,12 @@ case class Corpus() extends CustomPage {
       return
     }
 
-    val elems = ents.get.filter(_.get.parent == entity.id)
+    val elems = ents.get.filter(_.parent == entity.id)
 
     if (elems.nonEmpty) {
       if (dom.confirm("Element already expanded. Delete?"))
         removeRecursively(ents, elems)
-    } else ents += models.Entity(
+    } else ents += new models.Entity(
       id = nextId(ents),
       parent = entity.id,
       tokens = Var((entity.tokens.get._1, entity.tokens.get._2))
@@ -196,27 +193,27 @@ case class Corpus() extends CustomPage {
   }
 
   def nextId(ents: Buffer[models.Entity]): Int =
-    ents.get.sortBy(_.get.id).last.get.id + 1
+    ents.get.sortBy(_.id).last.id + 1
 
   def range(tokens: ReadChannel[(Int, Int)]): ReadBuffer[Int] =
     tokens.flatMapBuf { case (l, u) => Buffer(l until u: _*) }
 
   def tokenString(tks: models.Tokens,
-                  ipt: ReadChannel[(Int, Int)]): ReadChannel[String] =
-    ipt.map { case (l, u) =>
+                  ipt: (Int, Int)): String =
+    ipt match { case (l, u) =>
       (l until u).map(id => tks.tokens(id).orth).mkString(" ")
     }
 
   def viewTokens(tks: models.Tokens,
-                 entity: Ref[models.Entity],
+                 entity: models.Entity,
                  tokens: ReadChannel[(Int, Int)])
-    : ReadBuffer[HTML.Container.Inline] =
+    : DeltaBuffer[HTML.Container.Inline] =
   {
-    range(tokens).map { case Ref(token) =>
+    range(tokens).map { token =>
       HTML.Container.Inline(
         HTML.Container.Inline()
           .css("token-separator")
-          .show(ctrlPressed.map(_ && entity.get.tokens.get._1 != token))
+          .show(ctrlPressed.map(_ && entity.tokens.get._1 != token))
           .cursor(HTML.Cursor.Pointer)
           .onClick(_ => splitEntity(tks.entities, entity, token))
 
@@ -232,13 +229,13 @@ case class Corpus() extends CustomPage {
 
   def viewEntity(tks: models.Tokens, children: ReadBuffer[models.Entity]) = {
     HTML.Anchor(
-      children.map { case entityRef @ Ref(entity) =>
+      children.map { entity =>
         HTML.Container.Inline(
-          viewTokens(tks, entityRef, entity.tokens)
+          viewTokens(tks, entity, entity.tokens)
 
           , HTML.Container.Inline()
-            .show(children.isLast(entityRef).map(!_))
-            .onClick(ev => mergeEntity(tks.entities, entityRef, ev))
+            .show(children.isLast(entity).map(!_))
+            .onClick(ev => mergeEntity(tks.entities, entity, ev))
             .css("entity-merge")
             .css("entity-separator")
         ).css("disable-selection")
@@ -248,47 +245,51 @@ case class Corpus() extends CustomPage {
   }
 
   def entitiesWithChildren(ents: ReadBuffer[models.Entity]): ReadBuffer[models.Entity] =
-    ents.flatMapCh(entity =>
+    ents.flatMapCh { entity =>
       ents
-        .exists(_.parent == entity.get.id)
-        .map(if (_) Some(entity) else None))
+        .exists(_.parent == entity.id)
+        .partialMap { case true => entity }
+    }
 
   def viewEntityTree(tks: models.Tokens,
                      other: models.Tokens,
                      entityId: Int): HTML.List.Item =
   {
-    val children = tks.entities.filter(_.parent == entityId)
+    val children = tks.entities.filter(_.parent == entityId).buffer
 
     val select = if (entityId != -1) {
-      val entity = tks.entities.get.find(_.get.id == entityId).get.get
+      val entity = tks.entities.get.find(_.id == entityId).get
 
       entity.`class`.values.tail.attach { _ => saveCorpus() }
       entity.alignment.values.tail.attach { _ => saveCorpus() }
       entity.dependency.values.tail.attach { _ => saveCorpus() }
 
-      val alignment = entity.alignment.biMap[Option[Ref[models.Entity]]](
-        id => other.entities.get.find(_.get.id == id),
-        entity => if (entity.isDefined) entity.get.get.id else -1)
-
-      val dependency = entity.dependency.biMap[Option[Ref[models.Entity]]](
-        id => tks.entities.get.find(_.get.id == id),
-        entity => if (entity.isDefined) entity.get.get.id else -1)
-
-      val `class` = entity.`class`.biMap[Option[Ref[String]]](
-        tag => Database.classTags.get.find(_.get == tag),
-        ref => if (ref.isDefined) ref.get.get else "")
-
       val alignments = entitiesWithChildren(other.entities)
-        .mapToCh[String](ent => tokenString(other, ent.tokens).map(Some(_)))
+        .flatMap(e => e.tokens.map(rng => (e, tokenString(other, rng))).toBuffer)
 
       val dependencies = entitiesWithChildren(tks.entities)
         .filter(cur => cur.id != entityId)
-        .mapToCh[String](ent => tokenString(tks, ent.tokens).map(Some(_)))
+        .buffer
+        .flatMap(e => e.tokens.map(rng => (e, tokenString(tks, rng))).toBuffer)
+
+      val alignment = entity.alignment.biMap[Option[(models.Entity, String)]](
+        id => alignments.find$(_._1.id == id),
+        entity => if (entity.isDefined) entity.get._1.id else -1)
+
+      val dependency = entity.dependency.biMap[Option[(models.Entity, String)]](
+        id => dependencies.find$(_._1.id == id),
+        entity => if (entity.isDefined) entity.get._1.id else -1)
+
+      val `class` = entity.`class`.biMap[Option[String]](
+        tag => Database.classTags.get.find(_ == tag),
+        ref => if (ref.isDefined) ref.get else "")
+
+      def fmt(e: (models.Entity, String)) = e._2
 
       Inline(
-        HTML.Input.Select().default("").bind(alignments, alignment)
-        , HTML.Input.Select().default("").bind(dependencies, dependency)
-        , HTML.Input.Select().default("").bind(Database.classTags.mapTo(t => t), `class`))
+        HTML.Input.Select().default("").bind(alignments, fmt, alignment)
+        , HTML.Input.Select().default("").bind(dependencies, fmt, dependency)
+        , HTML.Input.Select().default("").bind(Database.classTags, identity[String], `class`))
     } else Inline()
 
     HTML.List.Item(
@@ -296,93 +297,94 @@ case class Corpus() extends CustomPage {
       , select
       , HTML.List.Unordered(
         children.map { child =>
-          viewEntityTree(tks, other, child.get.id)
+          viewEntityTree(tks, other, child.id)
         }
       )
     ).show(children.nonEmpty)
-     .asInstanceOf[HTML.List.Item] // TODO Widok fix
   }
 
   def body() = Inline(
-    Bootstrap.Lead(
+    Lead(
       HTML.Raw("<b>Usage:</b> Press <kbd>Ctrl</kbd> and select the dotted marker to create a new entity. Click a marker to connect two adjacent entities. Double-click an entity to expand it. If an entity is already expanded, double-clicking will remove it instead. Changes are saved automatically.")
     )
 
     , HTML.Text.Bold("Database: "), HTML.Input.File().accept(".xml").bind(dbPath), HTML.LineBreak() // TODO Provide two-way binding
     , HTML.Text.Bold("Import dump: "), HTML.Input.File().accept(".xml").bind(importPath), HTML.LineBreak()
 
-    , translation.map { case Ref(tr) =>
+    , translation.map { tr =>
       HTML.Container.Generic(
         HTML.List.Unordered(viewEntityTree(tr.source, tr.target, -1))
         , HTML.List.Unordered(viewEntityTree(tr.target, tr.source, -1))
       ).css("tree")
     }
 
-    , Button(Glyphicon.Ok)("Diagnostics")
+    , Button(Glyphicon.Ok(), " Diagnostics")
       .onClick(_ => loadDiagnostics())
       .show(translation.nonEmpty)
 
-    , Button(Glyphicon.Ok)("Mark as (un)done").onClick { _ =>
-      translation.get.get.done := !translation.get.get.done.get
+    , Button(Glyphicon.Ok(), " Mark as (un)done").onClick { _ =>
+      translation.get.done := !translation.get.done.get
       saveCorpus()
     }.show(translation.nonEmpty)
 
-    , Button(Glyphicon.ArrowLeft)("Previous").onClick(_ => prev())
-      .show(translation.flatMap(tr => translations.flatMap(_.translations.isHead(tr))).map(!_)) // TODO shorter
+    , Button(Glyphicon.ArrowLeft(), " Previous").onClick(_ => prev())
+      .show(translation.flatMap(tr => translations.flatMap(_.translations.isHead(tr))).map(!_))
       .show(translation.nonEmpty)
 
-    , Button(Glyphicon.ArrowRight)("Next").onClick(_ => next())
-      .show(translation.flatMap(tr => translations.flatMap(_.translations.isLast(tr))).map(!_)) // TODO shorter
+    , Button(Glyphicon.ArrowRight(), " Next").onClick(_ => next())
+      .show(translation.flatMap(tr => translations.flatMap(_.translations.isLast(tr))).map(!_))
       .show(translation.nonEmpty)
 
     , HTML.LineBreak()
 
     , translations.flatMapBuf(_.translations).map { tr =>
       val idx = translations.get.translations.indexOf(tr)
-      Button(Glyphicon.None, Button.Size.ExtraSmall)(
-        translation.equal(tr).map(
-          if (_) HTML.Text.Bold((idx + 1).toString) // TODO without .toString
-          else HTML.Text((idx + 1).toString))
-      ).cssCh(tr.get.done.map(if (_) "btn-success" else "btn-danger"))
-       .cssCh(translation.equal(tr), "active")
+      Button(
+        translation.is(tr).map[Widget[_]](
+          if (_) HTML.Text.Bold(idx + 1)
+          else idx + 1)
+      ).size(Size.ExtraSmall)
+       .cssState(tr.done, "btn-success")
+       .cssState(tr.done.map(!_), "btn-danger")
+       .cssState(translation.is(tr), "active")
        .onClick(_ => translation := tr)
     }
 
     , HTML.LineBreak()
 
-    , HTML.List.Unordered().bind(diagnostics) { case ref @ Ref((tr, ent, id)) =>
+    , HTML.List.Unordered(diagnostics.map { case ref @ (tr, ent, id) =>
       HTML.List.Item(
         HTML.Text.Bold(
           (translations.get.translations.indexOf(tr) + 1).toString + ": ")
         , Diagnostics.description(id)
-        , Button(Glyphicon.Book)("Load").onClick(_ => translation := tr)
-        , Button(Glyphicon.Book)("Ignore").onClick { _ =>
-          tr.get.disabledDiagnostics += id
+        , Button(Glyphicon.Book(), " Load").onClick(_ => translation := tr)
+        , Button(Glyphicon.Book(), " Ignore").onClick { _ =>
+          tr.disabledDiagnostics += id
           diagnostics.remove(ref)
           saveCorpus()
         }
       )
-    }
+    })
   )
 
   def prev() {
-    val prev = translations.get.translations.beforeOption(translation.get)
+    val prev = translations.get.translations.beforeOption$(translation.get)
     translation.flatProduce(prev)
   }
 
   def next() {
-    val next = translations.get.translations.afterOption(translation.get)
+    val next = translations.get.translations.afterOption$(translation.get)
     translation.flatProduce(next)
   }
 
-  translation.attach { case Ref(att) =>
+  translation.attach { att =>
     if (att.source.entities.get.isEmpty)
       att.source.entities +=
-        models.Entity(0, -1, Var((0, att.source.tokens.length)))
+        new models.Entity(0, -1, Var((0, att.source.tokens.length)))
 
     if (att.target.entities.get.isEmpty)
       att.target.entities +=
-        models.Entity(0, -1, Var((0, att.target.tokens.length)))
+        new models.Entity(0, -1, Var((0, att.target.tokens.length)))
   }
 
   def ready(route: InstantiatedRoute) { }
