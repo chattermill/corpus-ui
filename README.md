@@ -7,11 +7,6 @@ poliglot-ui is an editor for structuring and annotating a parallel sentence corp
 **Dependencies:** node-webkit, Node.js, Scala and sbt.
 
 ```bash
-$ git clone git@github.com:widok/widok.git
-$ cd widok
-$ sbt publish-local
-$ cd ..
-
 $ git clone git@github.com:poliglot/poliglot-ui.git
 
 $ npm install elementtree
